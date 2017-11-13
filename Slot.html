@@ -1,0 +1,288 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Slot Machine</title>
+<body>
+<script src="scripts/pixi.js"></script>
+<script>
+
+//game config constants
+
+// minimum number of spinning cicles before the first reel changes to the stopping state
+const spinningCicles = 100 + 100 * Math.random();
+// number of reels in the slot machine
+const numberReels = 4;
+// visible rows in th slot machine
+const visibleRows = 3;
+// the reel normal speed while in the spinning state
+const reelSpeed = 30;
+
+// sprite sequence of each of the 4 reels
+const reelConfig = new Array();
+reelConfig.push(["fish2.png", "shark.png", "turtle.png", "starfish.png", "fish1.png", "killerWhale.png", "morayael.png", "octopus.png", "seahorse.png"]);
+reelConfig.push(["killerWhale.png", "octopus.png", "starfish.png", "fish2.png", "turtle.png", "seahorse.png", "morayael.png", "shark.png", "fish1.png"]);
+reelConfig.push(["shark.png", "fish2.png", "killerWhale.png", "turtle.png", "starfish.png", "fish1.png", "octopus.png", "morayael.png", "seahorse.png"]);
+reelConfig.push(["starfish.png", "fish1.png", "seahorse.png", "shark.png", "turtle.png", "fish2.png", "morayael.png", "killerWhale.png", "octopus.png"]);
+
+// possible reel states
+const ReelState = (function () {
+    return {
+        STOPPED: 0,
+        STOPPING: 1,
+        SPINNING: 2
+    }
+} ());
+
+
+
+//Aliases
+var Container = PIXI.Container,
+    autoDetectRenderer = PIXI.autoDetectRenderer,
+    loader = PIXI.loader,
+    resources = PIXI.loader.resources,
+    TextureCache = PIXI.utils.TextureCache,
+    Texture = PIXI.Texture,
+    Sprite = PIXI.Sprite;
+
+//Create a Pixi stage and renderer and add the 
+//renderer.view to the DOM
+var stage = new Container(),
+    renderer = autoDetectRenderer(800, 600);
+document.body.appendChild(renderer.view);
+
+//load a JSON file and run the `setup` function when it's done
+loader
+  .add("images/slotMachineTextureAtlas.json")
+  .load(setup);
+
+//Global Variables
+var textureId, cicleCounter;
+var reels = new Array();
+
+
+class Reel {
+
+	constructor(container, index) {
+		
+		// Reel atributes
+		this.id = index;
+		this.container = container;
+		this.state=ReelState.STOPPED;
+		this.spinningCiclesLimit = spinningCicles * (index + 1);
+		
+		// Add configured sprites to he Reel
+		for (var i = 0; i < reelConfig[index].length; i++) {
+			//add the reel sprites
+			var sprite = new Sprite(textureId[reelConfig[index][i]]);
+
+			// Set the sprite initial position and velocity
+			sprite.x = 0;
+			sprite.y = 300-150*i;
+			sprite.vx = 0;
+			sprite.vy = 0;
+			
+			// Add the sprite to the PIXI Container
+			this.container.addChild(sprite);
+			
+			this.lastSpriteIndex=i;
+		}
+	}
+	
+	// Method that calculates the reel's sprites current position
+	Animate() {
+	
+		//if we're over the cicle limit then change the reel and game state
+		if(cicleCounter >= this.spinningCiclesLimit && this.state == ReelState.SPINNING){
+			//update the game state
+			state = stopping;
+			//update the reel state
+			this.state = ReelState.STOPPING;
+		}
+		
+		// calculate every reel sprite's position and only then check if a sprite has reached the end
+		// for each sprite in the reel
+		for (var i = 0; i < this.container.children.length; i++) {
+			
+			var sprite = this.container.getChildAt(i);
+			var height = sprite.height;
+			
+			// if reel is stopped then stop all reel sprites
+			if(this.state == ReelState.STOPPED){
+				sprite.vy = 0;
+			}
+			
+			// if reel is stopping and spinning velocity is too fast, then decrease sprite velocity
+			if(this.state == ReelState.STOPPING && sprite.vy > 1){
+				sprite.vy -= 1;
+			}
+			
+			// if reel is spinning then set the reel velocity
+			if(this.state == ReelState.SPINNING){
+				sprite.vy = reelSpeed;
+			}
+			
+			// if reel is stopping and the sprite is aligned at the top and there is a margin of at least 60 cicles over the limit, then stop reel
+			if(this.state == ReelState.STOPPING && sprite.y == 0 && cicleCounter >= this.spinningCiclesLimit+60){
+				sprite.vy = 0;
+				this.state = ReelState.STOPPED;
+			}
+			
+			// if reel is moving then move the sprite
+			if(this.state != ReelState.STOPPED){
+				// move the sprite down
+				sprite.y += sprite.vy;
+			}
+			
+
+		}
+		
+		// check if a sprite has reached the end
+		// for each sprite in the reel
+		for (var i = 0; i < this.container.children.length; i++) {
+			var sprite = this.container.getChildAt(i);
+			var height = sprite.height;
+			
+			if(this.state != ReelState.STOPPED){
+				if (sprite.y > height * visibleRows ) {
+					// when the current sprite reaches the end , move the last sprite to top to keep the loop 
+					sprite.y = this.container.getChildAt(this.lastSpriteIndex).y - height;
+					this.lastSpriteIndex = i;
+				} 
+			}
+		}
+	}
+}
+
+
+function setup() {
+
+	//alias called `textureId` for all the texture atlas frame id textures.
+	textureId = PIXI.loader.resources["images/slotMachineTextureAtlas.json"].textures; 
+
+	//make background_reef using the alias
+	var background_reef = new Sprite(textureId["reef1.png"]);
+	stage.addChild(background_reef);
+	
+
+	//make spin button using the alias
+	var button_spin = new Sprite(textureId["spin.png"]);
+	stage.addChild(button_spin);
+	//set the initial position
+	button_spin.x = renderer.width - 200;
+	button_spin.y = renderer.height - 105;
+	//opt-in to interactivity
+	button_spin.interactive = true;
+	//shows hand cursor
+	button_spin.buttonMode = true;
+	//pointers normalize touch and mouse
+	button_spin.on('pointerdown', button_spin_OnClick);
+	
+	//set mask 
+	var masker = new PIXI.Graphics();
+	masker.drawRect(0, 0, 800, 460);
+	masker.x = 0;
+	masker.y = 25;
+	stage.addChild(masker);
+	
+	for(var i = 0; i < numberReels ; i++){
+		//create the reel container
+		var reelContainer = new PIXI.Container();
+		//create the reel
+		var reel = new Reel(reelContainer, i);
+
+		reel.container.x = 55 + i*(150+30);
+		reel.container.y = 25;
+		
+		//add the reel container to the stage to be rendered
+		stage.addChild(reel.container);
+		
+		//apply the mask to the container
+		reel.container.mask = masker;
+		
+		//and store the reel to reels array
+		reels.push(reel);
+	}
+	
+	
+	//initializa the cicle counter
+	cicleCounter = 0;
+	
+	//set the initial game state
+	state = stopped;
+	
+	//start the game loop
+	gameLoop();
+}
+
+function gameLoop(){
+
+	//loop this function 60 times per second
+	requestAnimationFrame(gameLoop);
+	
+	//increment the cicle counter
+	cicleCounter = cicleCounter + 1;
+
+	//update the current game state:
+	state();
+
+	//render the stage
+	renderer.render(stage);
+	
+}
+
+function spinning() {
+
+	//for each reel
+	for(var j=0; j < reels.length; j++){
+		//update the reel state
+		reels[j].state = ReelState.SPINNING;
+		
+		//calculate the current cicle reel sprites position
+		reels[j].Animate();
+		
+		//update the game state and the reel state
+		if(cicleCounter >= reels[j].spinningCiclesLimit){
+			reels[j].state = ReelState.STOPPING;
+			state = stopping;
+		}
+	}
+}
+
+		
+
+function stopping() {
+
+	var isStillSpinning = false;
+
+	//for each reel
+	for(var j=0; j < reels.length; j++){
+		// check if any of the reels are still spinning
+		if(reels[j].state == ReelState.SPINNING || reels[j].state == ReelState.STOPPING){
+			isStillSpinning = true;
+		}
+		//calculate the current cicle reel position
+		reels[j].Animate();
+	}
+	
+	//update the game state
+	if(!isStillSpinning){
+		state = stopped;
+	}
+}
+
+function stopped() {
+	//reset the cicleCounter
+	cicleCounter = 0;
+}
+
+function button_spin_OnClick () {
+	
+	//set the game state
+	state = spinning;
+}
+
+
+</script>
+</body>
+
+
+
